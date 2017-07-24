@@ -19,9 +19,17 @@ public:
     } unique_id;
 
     struct Subscriber {
+        Subscriber(ros::NodeHandle&n, const std::string & topic, std::size_t queue_size) {
+            sub_info = n.subscribe(topic,1, &Subscriber::OnInfo, this);
+        }
+
         ros::Subscriber sub;
         ros::Subscriber sub_info;
         ros::Subscriber sub_fast;
+
+        void OnInfo(const std_msgs::Int64&x) {
+            ROS_DEBUG_STREAM("ID OF PUBLISHER IS:" << x);
+        }
     };
 
     template<class T>
@@ -37,14 +45,8 @@ public:
         void publish(const D& data, const std_msgs::Header &header);
     };
 
-    static Subscriber subscribe(ros::NodeHandle&n, const std::string & topic, std::size_t queue_size) {
-        Subscriber sub;/*
-        sub.sub_info = n.subscribe(topic,1,[](const std_msgs::Int64& id) {
-            std::cout << "INFO\n";
-            return;
-        });*/
-
-        return sub;
+    static std::shared_ptr<Subscriber> subscribe(ros::NodeHandle&n, const std::string & topic, std::size_t queue_size) {
+        return std::make_shared<Subscriber>(n,topic,queue_size);
     }
 
     template<class T>
