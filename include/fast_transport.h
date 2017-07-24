@@ -7,7 +7,6 @@
 
 #include <string>
 
-template<class T>
 class fast_transport {
 public:
 
@@ -19,8 +18,13 @@ public:
         }
     } unique_id;
 
-    ros::Subscriber fast_subscriber;
+    struct Subscriber {
+        ros::Subscriber sub;
+        ros::Subscriber sub_info;
+        ros::Subscriber sub_fast;
+    };
 
+    template<class T>
     struct Publisher {
         ros::Publisher pub;
         ros::Publisher pub_info;
@@ -33,12 +37,19 @@ public:
         void publish(const D& data, const std_msgs::Header &header);
     };
 
-    static ros::Subscriber subscribe() {
-        return {};
+    static Subscriber subscribe(ros::NodeHandle&n, const std::string & topic, std::size_t queue_size) {
+        Subscriber sub;/*
+        sub.sub_info = n.subscribe(topic,1,[](const std_msgs::Int64& id) {
+            std::cout << "INFO\n";
+            return;
+        });*/
+
+        return sub;
     }
 
-    static Publisher advertise(ros::NodeHandle&n, const std::string & topic) {
-        Publisher pub;
+    template<class T>
+    static Publisher<T> advertise(ros::NodeHandle&n, const std::string & topic) {
+        Publisher<T> pub;
         pub.pub = n.advertise<T>(topic, 1);
         pub.fast_pub = n.advertise<std_msgs::Header>("/fast_transport/"+topic, 1);
         pub.pub_info = n.advertise<std_msgs::Int64>("/fast_transport/info/"+topic, 1,true);
@@ -56,7 +67,7 @@ private:
 
 
 template<class T>  template <class D>
-void fast_transport<T>::Publisher::publish(const D &data, const std_msgs::Header &header) {
+void fast_transport::Publisher<T>::publish(const D &data, const std_msgs::Header &header) {
     if(pub.getNumSubscribers() != 0) {
         pub.publish(GetMsg(data,header));
     }
