@@ -28,17 +28,17 @@ public:
                     bip::shared_memory_object shm (bip::open_only, "fast_transport_id", bip::read_only);
                     bip::mapped_region region(shm, bip::read_only);
                     id = *static_cast<int*>(region.get_address());
-                    ROS_DEBUG_STREAM("LOADING identification with ID:" << id);
+                    ROS_DEBUG_STREAM("LOADED identification with ID:" << id);
                 } catch (const boost::interprocess::interprocess_exception & except) {
                     srand(time(NULL));
                     const int newID = rand();
-                    ROS_DEBUG_STREAM("CREATING NEW identification with ID:" << newID);
                     bip::shared_memory_object::remove("fast_transport_id");
                     bip::shared_memory_object shm (bip::create_only, "fast_transport_id", bip::read_write);
                     shm.truncate(sizeof(int));
                     bip::mapped_region region(shm, bip::read_write);
                     *static_cast<int*>(region.get_address()) = newID;
                     id = newID;
+                    ROS_DEBUG_STREAM("CREATED identification with ID:" << newID);
                 }
             }
 
@@ -77,7 +77,7 @@ public:
                 sub = node.subscribe<std_msgs::Header>("/fast_transport"+topic,1, [this](std_msgs::Header::ConstPtr x) {
                     try {
                         const std::string memoryName = topic + "/" + std::to_string(x->seq);
-                        bip::shared_memory_object shm (bip::create_only, memoryName.c_str(), bip::read_only);
+                        bip::shared_memory_object shm (bip::open_only, memoryName.c_str(), bip::read_only);
                         bip::mapped_region region(shm, bip::read_only);
                         fun(helper<T,D>::get_shared_data(region), *x);
                     } catch (const boost::interprocess::interprocess_exception & except) {
