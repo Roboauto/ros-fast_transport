@@ -4,15 +4,17 @@
 #include <std_msgs/Header.h>
 
 #include <ros/ros.h>
-
+#include <boost/interprocess/managed_shared_memory.hpp>
+#include <boost/interprocess/mapped_region.hpp>
 #include <string>
 
-#include <boost/interprocess/mapped_region.hpp>
-#include <boost/interprocess/managed_shared_memory.hpp>
+#include "fast_transport/queue.h"
 
 //TODO: remove!
 #undef ROS_DEBUG_STREAM
 #define ROS_DEBUG_STREAM(x) std::cerr << x << std::endl
+
+namespace bip = boost::interprocess;
 
 class fast_transport {
 public:
@@ -23,7 +25,6 @@ public:
     static class unique_id_c {
         public:
             unique_id_c() {
-                namespace bip = boost::interprocess;
                 try {
                     bip::shared_memory_object shm (bip::open_only, "fast_transport_id", bip::read_only);
                     bip::mapped_region region(shm, bip::read_only);
@@ -34,6 +35,7 @@ public:
                     const int newID = rand();
                     bip::shared_memory_object::remove("fast_transport_id");
                     bip::shared_memory_object shm (bip::create_only, "fast_transport_id", bip::read_write);
+
                     shm.truncate(sizeof(int));
                     bip::mapped_region region(shm, bip::read_write);
                     *static_cast<int*>(region.get_address()) = newID;
@@ -68,7 +70,6 @@ public:
         std::function<void(const D&, const std_msgs::Header&) > fun;
 
         void OnInfo(const std_msgs::Int64&x) {
-            namespace bip = boost::interprocess;
             ROS_DEBUG_STREAM("ID OF PUBLISHER IS:" << x.data);
 
             if(x.data == unique_id.GetId()) {
@@ -79,6 +80,7 @@ public:
                         const std::string memoryName = topic + "/" + std::to_string(x->seq);
                         bip::shared_memory_object shm (bip::open_only, memoryName.c_str(), bip::read_only);
                         bip::mapped_region region(shm, bip::read_only);
+
                         fun(helper<T,D>::get_shared_data(region), *x);
                     } catch (const boost::interprocess::interprocess_exception & except) {
                         ROS_ERROR_STREAM( "Exception while opening shared memory on fast_transport: "<< except.what());
@@ -96,9 +98,23 @@ public:
 
     template<class T>
     struct Publisher {
+        Publisher(const std::string& topic, std::size_t queueSize = 10) : queue(queueSize), topic(topic), remover(topic) {
+        }
+
         ros::Publisher pub;
         ros::Publisher pub_info;
         ros::Publisher fast_pub;
+        Queue queue;
+        std::string topic;
+
+        struct shm_remove {
+            shm_remove(const std::string& topicName) : topic(topicName) {
+                bip::shared_memory_object::remove(topic.c_str());
+
+            }
+            ~shm_remove(){ bip::shared_memory_object::remove(topic.c_str()); }
+            std::string topic;
+        } remover;
 
         template<class D, typename ...X>
         void publish(const D& data, const std_msgs::Header &header, X...);
@@ -111,7 +127,7 @@ public:
 
     template<class T>
     static Publisher<T> advertise(ros::NodeHandle&n, const std::string & topic) {
-        Publisher<T> pub;
+        Publisher<T> pub(topic);
         pub.pub = n.advertise<T>(topic, 1);
         pub.fast_pub = n.advertise<std_msgs::Header>("/fast_transport"+topic, 1);
         pub.pub_info = n.advertise<std_msgs::Int64>("/fast_transport/info"+topic, 1,true);
@@ -130,6 +146,12 @@ private:
 
 template<class T>  template <class D, class ...X>
 void fast_transport::Publisher<T>::publish(const D &data, const std_msgs::Header &header, X... args) {
+    std::string id{topic + std::to_string(unique_id.GetId())};
+    bip::shared_memory_object shm(bip::create_only, topic.c_str() + unique_id.GetId(), bip::read_write);
+    shm.truncate(sizeof(T));
+
+    bip::mapped_region region{shm, bip::read_write};
+
     if(pub.getNumSubscribers() != 0) {
         pub.publish(helper<T,D>::get_msg(data,header, args...));
     }

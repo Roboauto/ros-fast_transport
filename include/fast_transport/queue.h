@@ -8,6 +8,10 @@ class Queue {
     std::queue<std::string> queue_;
     bool full_ = false;
 public:
+    std::size_t maxSize() const {
+        return maxSize_;
+    }
+
     Queue(std::size_t maxSize) : maxSize_(maxSize) {
     }
 
