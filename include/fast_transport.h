@@ -7,6 +7,9 @@
 
 #include <string>
 
+#include <boost/interprocess/mapped_region.hpp>
+#include <boost/interprocess/managed_shared_memory.hpp>
+
 //TODO: remove!
 #undef ROS_DEBUG_STREAM
 #define ROS_DEBUG_STREAM(x) std::cerr << x << std::endl
@@ -44,14 +47,21 @@ public:
         std::function<void(const D&, const std_msgs::Header&) > fun;
 
         void OnInfo(const std_msgs::Int64&x) {
-
+            namespace bip = boost::interprocess;
             ROS_DEBUG_STREAM("ID OF PUBLISHER IS:" << x.data);
 
-            if(x.data != unique_id.GetId()) {
+            if(x.data == unique_id.GetId()) {
                 ROS_DEBUG_STREAM("SUBSCRIBING TO FAST TRANSPORT");
                 sub.shutdown();
                 sub = node.subscribe<std_msgs::Header>("/fast_transport"+topic,1, [this](std_msgs::Header::ConstPtr x) {
-
+                    try {
+                        const std::string memoryName = topic + "/" + std::to_string(x->seq);
+                        bip::shared_memory_object shm (bip::create_only, memoryName.c_str(), bip::read_only);
+                        bip::mapped_region region(shm, bip::read_only);
+                        fun(helper<T,D>::get_shared_data(region), *x);
+                    } catch (const boost::interprocess::interprocess_exception & except) {
+                        ROS_ERROR_STREAM( "Exception while opening shared memory on fast_transport: "<< except.what());
+                    }
                 });
             } else {
                 ROS_DEBUG_STREAM("SUBSCRIBING TO SLOW TRANSPORT");

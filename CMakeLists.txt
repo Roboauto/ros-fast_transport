@@ -13,10 +13,13 @@ catkin_package(
     DEPENDS system_lib
 )
 
+find_package(Boost REQUIRED COMPONENTS system)
+
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(include)
 
 include_directories(
     ${catkin_INCLUDE_DIRS}
+    ${BOOST_INCLUDE_DIRS}
 )

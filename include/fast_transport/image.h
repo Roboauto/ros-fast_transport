@@ -13,7 +13,15 @@ struct fast_transport::helper<sensor_msgs::Image,cv::Mat> {
         bridge.toImageMsg(msg);
         return msg;
     }
+
     static cv::Mat get_data(const sensor_msgs::Image &msg) {
         return cv_bridge::toCvCopy(msg)->image;
+    }
+
+    static cv::Mat get_shared_data(const boost::interprocess::mapped_region &region) {
+        cv::Mat* addr = static_cast<cv::Mat*>(region.get_address());
+        cv::Mat data;
+        addr->copyTo(data);
+        return data;
     }
 };
