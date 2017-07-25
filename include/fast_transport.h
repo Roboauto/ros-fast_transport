@@ -20,12 +20,33 @@ public:
     template<class T, class D>
     struct helper;
 
-    static class unique_id {
+    static class unique_id_c {
         public:
-        int GetId() {
-            //TODO: implement
-            return 1;
-        }
+            unique_id_c() {
+                namespace bip = boost::interprocess;
+                try {
+                    bip::shared_memory_object shm (bip::open_only, "fast_transport_id", bip::read_only);
+                    bip::mapped_region region(shm, bip::read_only);
+                    id = *static_cast<int*>(region.get_address());
+                    ROS_DEBUG_STREAM("LOADING identification with ID:" << id);
+                } catch (const boost::interprocess::interprocess_exception & except) {
+                    srand(time(NULL));
+                    const int newID = rand();
+                    ROS_DEBUG_STREAM("CREATING NEW identification with ID:" << newID);
+                    bip::shared_memory_object::remove("fast_transport_id");
+                    bip::shared_memory_object shm (bip::create_only, "fast_transport_id", bip::read_write);
+                    shm.truncate(sizeof(int));
+                    bip::mapped_region region(shm, bip::read_write);
+                    *static_cast<int*>(region.get_address()) = newID;
+                    id = newID;
+                }
+            }
+
+            int GetId() {
+                return id;
+            }
+        private:
+            int id;
     } unique_id;
 
     template<class T, class D>
