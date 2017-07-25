@@ -43,22 +43,16 @@ public:
 
         std::function<void(const D&, const std_msgs::Header&) > fun;
 
-        void OnFast(const std_msgs::Header &header) {
-
-        }
-
-        void OnNormal(const T &header) {
-
-        }
-
         void OnInfo(const std_msgs::Int64&x) {
 
             ROS_DEBUG_STREAM("ID OF PUBLISHER IS:" << x.data);
 
-            if(x.data == unique_id.GetId()) {
+            if(x.data != unique_id.GetId()) {
                 ROS_DEBUG_STREAM("SUBSCRIBING TO FAST TRANSPORT");
                 sub.shutdown();
-                sub = node.subscribe("/fast_transport"+topic,1, &Subscriber::OnFast, this);
+                sub = node.subscribe<std_msgs::Header>("/fast_transport"+topic,1, [this](std_msgs::Header::ConstPtr x) {
+
+                });
             } else {
                 ROS_DEBUG_STREAM("SUBSCRIBING TO SLOW TRANSPORT");
                 sub.shutdown();

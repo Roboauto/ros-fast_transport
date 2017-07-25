@@ -7,7 +7,7 @@
 
 template <>
 struct fast_transport::helper<sensor_msgs::Image,cv::Mat> {
-    static sensor_msgs::Image get_msg(const cv::Mat& data, const std_msgs::Header &header, const std::string encoding = "passthrough" ) {
+    static sensor_msgs::Image get_msg(const cv::Mat& data, const std_msgs::Header &header, const std::string encoding = "" ) {
         auto bridge = cv_bridge::CvImage(header, encoding, data);
         sensor_msgs::Image msg;
         bridge.toImageMsg(msg);
