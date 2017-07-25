@@ -22,6 +22,14 @@ public:
     template<class T, class D>
     struct helper;
 
+    static std::string get_shared_name(const std::string& topic, std::size_t seq_id) {
+        std::string id{topic + "/" + std::to_string(seq_id)};
+        for(auto &c :id) {
+            if (c == '/')
+                c = '_';
+        }
+        return id;
+    }
     static class unique_id_c {
         public:
             unique_id_c() {
@@ -77,7 +85,7 @@ public:
                 sub.shutdown();
                 sub = node.subscribe<std_msgs::Header>("/fast_transport"+topic,1, [this](std_msgs::Header::ConstPtr x) {
                     try {
-                        const std::string memoryName = topic + "/" + std::to_string(x->seq);
+                        const std::string memoryName = get_shared_name(topic,x->seq);
                         bip::shared_memory_object shm (bip::open_only, memoryName.c_str(), bip::read_only);
                         bip::mapped_region region(shm, bip::read_only);
 
@@ -98,7 +106,14 @@ public:
 
     template<class T>
     struct Publisher {
-        Publisher(const std::string& topic, std::size_t queueSize = 10) : queue(queueSize), topic(topic), remover(topic) {
+        Publisher(const std::string& topic, std::size_t queueSize = 5) : queue(queueSize), topic(topic), remover(topic) {
+        }
+        ~Publisher() {
+            std::string data= queue.pop();
+            while(!data.empty()) {
+                bip::shared_memory_object::remove(data.c_str());
+                data= queue.pop();
+            }
         }
 
         ros::Publisher pub;
@@ -146,18 +161,22 @@ private:
 
 template<class T>  template <class D, class ...X>
 void fast_transport::Publisher<T>::publish(const D &data, const std_msgs::Header &header, X... args) {
-    auto id{header.seq};
-    bip::shared_memory_object shm(bip::create_only, std::string(topic + std::to_string(id)).c_str(), bip::read_write);
-    shm.truncate(sizeof(D));
-
-    bip::mapped_region region{shm, bip::read_write};
-    auto shdata = static_cast<D*>(region.get_address());
-    *shdata = data;
     if(pub.getNumSubscribers() != 0) {
         pub.publish(helper<T,D>::get_msg(data,header, args...));
     }
 
     if(fast_pub.getNumSubscribers() != 0) {
+        std::string id = get_shared_name(topic, header.seq);
+        const auto to_remove= queue.push(id);
+        if(!to_remove.empty()) {
+            bip::shared_memory_object::remove(to_remove.c_str());
+        }
+
+        bip::shared_memory_object::remove(id.c_str());
+        bip::shared_memory_object shm(bip::create_only, id.c_str(), bip::read_write);
+        shm.truncate(helper<T,D>::get_shared_size(data));
+        bip::mapped_region region(shm, bip::read_write);
+        helper<T,D>::set_shared_data(data, region);
         fast_pub.publish(header);
     }
 }

@@ -14,7 +14,14 @@ public:
 
     Queue(std::size_t maxSize) : maxSize_(maxSize) {
     }
-
+    std::string pop() {
+        std::string data{};
+        if(!queue_.empty()) {
+            data =queue_.front();
+            queue_.pop();
+        }
+        return data;
+    }
     std::string push(std::string&& element) {
         queue_.push(std::move(element));
         if (full_) {
