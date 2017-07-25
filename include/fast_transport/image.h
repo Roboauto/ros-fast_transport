@@ -37,4 +37,15 @@ struct fast_transport::helper<sensor_msgs::Image, cv::Mat> {
                                static_cast<uchar *>(region.get_address() + sizeof(cv::Mat)));
         return data;
     }
+
+    static cv::Mat get_shared_data(boost::interprocess::managed_shared_memory &region, const std::string memId) {
+        std::pair<cv::Mat*, boost::interprocess::managed_shared_memory::size_type> res;
+        res = region.find<cv::Mat>(memId.c_str());
+        cv::Mat* matPt = res.first;
+        cv::Mat data = cv::Mat(matPt->rows,
+                               matPt->cols,
+                               matPt->type(),
+                               static_cast<uchar *>(static_cast<void*>(matPt) + sizeof(cv::Mat)));
+        return data;
+    }
 };

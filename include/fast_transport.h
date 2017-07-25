@@ -22,8 +22,8 @@ public:
     template<class T, class D>
     struct helper;
 
-    static std::string get_shared_name(const std::string& topic, std::size_t seq_id) {
-        std::string id{topic + "/" + std::to_string(seq_id)};
+    static std::string get_shared_name(const std::string& topic, std::size_t seq_id = 0) {
+        std::string id{seq_id == 0 ? topic : topic + "/" + std::to_string(seq_id)};
         for(auto &c :id) {
             if (c == '/')
                 c = '_';
@@ -86,10 +86,9 @@ public:
                 sub = node.subscribe<std_msgs::Header>("/fast_transport"+topic,1, [this](std_msgs::Header::ConstPtr x) {
                     try {
                         const std::string memoryName = get_shared_name(topic,x->seq);
-                        bip::shared_memory_object shm (bip::open_only, memoryName.c_str(), bip::read_only);
-                        bip::mapped_region region(shm, bip::read_only);
+                        bip::managed_shared_memory segment(bip::open_or_create, get_shared_name(topic).c_str(), std::stoul(x->frame_id));
 
-                        fun(helper<T,D>::get_shared_data(region), *x);
+                        fun(helper<T,D>::get_shared_data(segment, memoryName), *x);
                     } catch (const boost::interprocess::interprocess_exception & except) {
                         ROS_ERROR_STREAM( "Exception while opening shared memory on fast_transport: "<< except.what());
                     }
@@ -108,6 +107,12 @@ public:
     struct Publisher {
         Publisher(const std::string& topic, std::size_t queueSize = 5) : queue(queueSize), topic(topic), remover(topic) {
         }
+        Publisher(const Publisher& o) : queue(o.queue.maxSize()), topic(o.topic), remover(o.topic) {
+            msmPt = nullptr;
+        }
+        Publisher& operator=(const Publisher& o) {
+            msmPt = nullptr;
+        }
         ~Publisher() {
             std::string data= queue.pop();
             while(!data.empty()) {
@@ -122,6 +127,8 @@ public:
         Queue queue;
         std::string topic;
 
+        std::unique_ptr<bip::managed_shared_memory> msmPt = nullptr;
+
         struct shm_remove {
             shm_remove(const std::string& topicName) : topic(topicName) {
                 bip::shared_memory_object::remove(topic.c_str());
@@ -132,7 +139,7 @@ public:
         } remover;
 
         template<class D, typename ...X>
-        void publish(const D& data, const std_msgs::Header &header, X...);
+        void publish(const D& data, std_msgs::Header &header, X...);
     };
 
     template<class T, class D, class X>
@@ -160,7 +167,12 @@ private:
 
 
 template<class T>  template <class D, class ...X>
-void fast_transport::Publisher<T>::publish(const D &data, const std_msgs::Header &header, X... args) {
+void fast_transport::Publisher<T>::publish(const D &data, std_msgs::Header &header, X... args) {
+    if (!msmPt) {
+        msmPt = std::make_unique<bip::managed_shared_memory>
+                (bip::create_only, get_shared_name(topic).c_str(), (queue.maxSize() + 1) * helper<T,D>::get_shared_size(data));
+    }
+    header.frame_id = std::to_string(helper<T,D>::get_shared_size(data));
     if(pub.getNumSubscribers() != 0) {
         pub.publish(helper<T,D>::get_msg(data,header, args...));
     }
@@ -169,14 +181,11 @@ void fast_transport::Publisher<T>::publish(const D &data, const std_msgs::Header
         std::string id = get_shared_name(topic, header.seq);
         const auto to_remove= queue.push(id);
         if(!to_remove.empty()) {
-            bip::shared_memory_object::remove(to_remove.c_str());
+            msmPt->destroy<D>(to_remove.c_str());
         }
 
-        bip::shared_memory_object::remove(id.c_str());
-        bip::shared_memory_object shm(bip::create_only, id.c_str(), bip::read_write);
-        shm.truncate(helper<T,D>::get_shared_size(data));
-        bip::mapped_region region(shm, bip::read_write);
-        helper<T,D>::set_shared_data(data, region);
+//        msmPt->destroy<D>(to_remove.c_str());
+        msmPt->construct<D>(id.c_str())(data);
         fast_pub.publish(header);
     }
 }
