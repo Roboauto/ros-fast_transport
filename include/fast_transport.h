@@ -78,12 +78,12 @@ public:
         template<class D, typename ...X>
         void publish(const D& data, const std_msgs::Header &header, X...);
     };
-/*
+
     template<class T, class D, class X>
     static std::shared_ptr<Subscriber<T,D>> subscribe(ros::NodeHandle&n, const std::string & topic, std::size_t queue_size, const X& fun) {
-        //return std::make_shared<Subscriber<T,D>>(n,topic,queue_size,fun);
+        return std::make_shared<Subscriber<T,D>>(n,topic,queue_size,fun);
     }
-*/
+
     template<class T>
     static Publisher<T> advertise(ros::NodeHandle&n, const std::string & topic) {
         Publisher<T> pub;
