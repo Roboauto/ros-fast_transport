@@ -146,12 +146,13 @@ private:
 
 template<class T>  template <class D, class ...X>
 void fast_transport::Publisher<T>::publish(const D &data, const std_msgs::Header &header, X... args) {
-    std::string id{topic + std::to_string(unique_id.GetId())};
-    bip::shared_memory_object shm(bip::create_only, topic.c_str() + unique_id.GetId(), bip::read_write);
-    shm.truncate(sizeof(T));
+    auto id{header.seq};
+    bip::shared_memory_object shm(bip::create_only, std::string(topic + std::to_string(id)).c_str(), bip::read_write);
+    shm.truncate(sizeof(D));
 
     bip::mapped_region region{shm, bip::read_write};
-
+    auto shdata = static_cast<D*>(region.get_address());
+    *shdata = data;
     if(pub.getNumSubscribers() != 0) {
         pub.publish(helper<T,D>::get_msg(data,header, args...));
     }
